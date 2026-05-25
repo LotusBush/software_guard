@@ -213,14 +213,24 @@ const handleCreate = async () => {
     return
   }
 
+  if (createForm.value.username.length < 3) {
+    message.error('用户名至少3个字符')
+    return
+  }
+
   if (createForm.value.password.length < 6) {
     message.error('密码至少6位')
     return
   }
 
+  const payload = { ...createForm.value }
+  if (!payload.email) {
+    delete payload.email
+  }
+
   createLoading.value = true
   try {
-    await userApi.create(createForm.value)
+    await userApi.create(payload)
     message.success('创建成功')
     showCreateModal.value = false
     createForm.value = {
@@ -230,7 +240,15 @@ const handleCreate = async () => {
     }
     loadUsers()
   } catch (error) {
-    message.error('创建失败')
+    const detail = error.response?.data?.detail
+    if (typeof detail === 'string') {
+      message.error(detail)
+    } else if (Array.isArray(detail)) {
+      const msgs = detail.map(e => e.msg).join('；')
+      message.error(msgs)
+    } else {
+      message.error('创建失败')
+    }
   } finally {
     createLoading.value = false
   }

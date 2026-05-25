@@ -44,7 +44,7 @@ RUN apt-get update \
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 COPY backend/pyproject.toml ./
-RUN uv pip install --system --no-cache -i https://pypi.tuna.tsinghua.edu.cn/simple -r pyproject.toml
+RUN uv pip install --system --no-cache -i https://mirrors.aliyun.com/pypi/simple/ -r pyproject.toml
 
 COPY backend/ ./
 
