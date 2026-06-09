@@ -96,6 +96,15 @@
         <a-form-item label="用户名">
           <a-input v-model:value="editForm.username" disabled />
         </a-form-item>
+        <a-form-item label="邮箱">
+          <a-input v-model:value="editForm.email" placeholder="请输入邮箱" />
+        </a-form-item>
+        <a-form-item label="新密码（留空则不修改）">
+          <a-input-password v-model:value="editForm.password" placeholder="至少6位" />
+        </a-form-item>
+        <a-form-item label="确认新密码" v-if="editForm.password">
+          <a-input-password v-model:value="editForm.confirm_password" placeholder="请再次输入新密码" />
+        </a-form-item>
         <a-form-item label="角色" required>
           <a-select v-model:value="editForm.role">
             <a-select-option value="user">普通用户</a-select-option>
@@ -148,7 +157,10 @@ const editForm = ref({
   id: null,
   username: '',
   role: 'user',
-  is_active: true
+  is_active: true,
+  email: '',
+  password: '',
+  confirm_password: ''
 })
 
 const columns = [
@@ -259,23 +271,47 @@ const editUser = (user) => {
     id: user.id,
     username: user.username,
     role: user.role,
-    is_active: user.is_active
+    is_active: user.is_active,
+    email: user.email || '',
+    password: '',
+    confirm_password: ''
   }
   showEditModal.value = true
 }
 
 const handleUpdate = async () => {
+  if (editForm.value.password && editForm.value.password !== editForm.value.confirm_password) {
+    message.error('两次输入的新密码不一致')
+    return
+  }
+  if (editForm.value.password && editForm.value.password.length < 6) {
+    message.error('新密码至少6位')
+    return
+  }
   updateLoading.value = true
   try {
     await userApi.update(editForm.value.id, {
       role: editForm.value.role,
-      is_active: editForm.value.is_active
+      is_active: editForm.value.is_active,
+      email: editForm.value.email || null
     })
-    message.success('更新成功')
+    if (editForm.value.password) {
+      try {
+        await userApi.resetPassword(editForm.value.id, {
+          password: editForm.value.password
+        })
+        message.success('更新成功，密码已重置')
+      } catch (pwdErr) {
+        message.warning('信息已更新，但密码重置失败，请重试')
+      }
+    } else {
+      message.success('更新成功')
+    }
     showEditModal.value = false
     loadUsers()
   } catch (error) {
-    message.error('更新失败')
+    const detail = error.response?.data?.detail
+    message.error(typeof detail === 'string' ? detail : '更新失败')
   } finally {
     updateLoading.value = false
   }

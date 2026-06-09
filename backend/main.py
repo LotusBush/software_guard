@@ -1,10 +1,17 @@
+import logging
+import warnings
+
+logging.basicConfig(level=logging.WARNING)
+logging.getLogger("passlib").setLevel(logging.ERROR)
+warnings.filterwarnings("ignore", message=".*管理员密码仍为默认值.*")
+
 from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import shutil
 
@@ -27,8 +34,14 @@ from app.api.upload import router as upload_router
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
-    # 启动时创建数据库表
-    Base.metadata.create_all(bind=engine)
+    # 启动时创建数据库表（多 worker 并发启动时 ENUM 类型可能冲突，用 try/except 兼容）
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        # 仅吞掉多 worker 并发导致的对象已存在错误，其他错误仍需抛出
+        msg = str(e).lower() if str(e) else ""
+        if "already exists" not in msg and "duplicate" not in msg:
+            raise
 
     # 自动迁移：为已有表补充新字段
     from sqlalchemy import text, inspect
@@ -42,12 +55,6 @@ async def lifespan(app: FastAPI):
             if 'auth_source' not in columns:
                 conn.execute(text("ALTER TABLE users ADD COLUMN auth_source VARCHAR(10) DEFAULT 'local'"))
                 conn.commit()
-            # 兼容：如果 inspector 缓存导致遗漏，用 try/except 兜底
-            try:
-                conn.execute(text("ALTER TABLE users ADD COLUMN auth_source VARCHAR(10) DEFAULT 'local'"))
-                conn.commit()
-            except Exception:
-                pass
 
     # 创建初始管理员账号（如果不存在）
     from app.core.database import SessionLocal
@@ -79,8 +86,14 @@ async def lifespan(app: FastAPI):
                 role=UserRole.ADMIN
             )
             db.add(admin)
-            db.commit()
-            print(f"初始管理员账号已创建: {settings.FIRST_ADMIN_USERNAME}")
+            try:
+                db.commit()
+                print(f"初始管理员账号已创建: {settings.FIRST_ADMIN_USERNAME}")
+            except Exception as e:
+                db.rollback()
+                msg = str(e).lower() if str(e) else ""
+                if "unique" not in msg and "duplicate" not in msg:
+                    raise
     finally:
         db.close()
 

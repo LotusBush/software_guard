@@ -14,8 +14,34 @@
             <a-tag v-else color="default">普通用户</a-tag>
           </a-space>
         </div>
+        <div class="user-actions">
+          <a-button type="primary" @click="showPwdModal = true">
+            <template #icon><LockOutlined /></template>
+            修改密码
+          </a-button>
+        </div>
       </div>
     </a-card>
+
+    <!-- 修改密码弹窗 -->
+    <a-modal
+      v-model:open="showPwdModal"
+      title="修改密码"
+      @ok="handleChangePassword"
+      :confirm-loading="pwdLoading"
+    >
+      <a-form :model="pwdForm" layout="vertical">
+        <a-form-item label="旧密码" required>
+          <a-input-password v-model:value="pwdForm.old_password" placeholder="请输入旧密码" />
+        </a-form-item>
+        <a-form-item label="新密码" required>
+          <a-input-password v-model:value="pwdForm.new_password" placeholder="请输入新密码（至少6位）" />
+        </a-form-item>
+        <a-form-item label="确认新密码" required>
+          <a-input-password v-model:value="pwdForm.confirm_password" placeholder="请再次输入新密码" />
+        </a-form-item>
+      </a-form>
+    </a-modal>
 
     <!-- 功能菜单 -->
     <a-row :gutter="16" class="menu-grid">
@@ -87,15 +113,18 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { message } from 'ant-design-vue'
 import { useUserStore } from '@/stores/user'
 import { requestApi } from '@/api/request'
 import { downloadApi } from '@/api/download'
+import { authApi } from '@/api/auth'
 import {
   UserOutlined,
   FileTextOutlined,
   DownloadOutlined,
   SettingOutlined,
-  ClockCircleOutlined
+  ClockCircleOutlined,
+  LockOutlined
 } from '@ant-design/icons-vue'
 
 const userStore = useUserStore()
@@ -105,6 +134,49 @@ const stats = ref({
   totalDownloads: 0,
   pendingRequests: 0
 })
+
+const showPwdModal = ref(false)
+const pwdLoading = ref(false)
+const pwdForm = ref({
+  old_password: '',
+  new_password: '',
+  confirm_password: ''
+})
+
+const handleChangePassword = async () => {
+  if (!pwdForm.value.old_password || !pwdForm.value.new_password || !pwdForm.value.confirm_password) {
+    message.error('请填写所有密码字段')
+    return
+  }
+  if (pwdForm.value.new_password.length < 6) {
+    message.error('新密码至少6位')
+    return
+  }
+  if (pwdForm.value.new_password !== pwdForm.value.confirm_password) {
+    message.error('两次输入的新密码不一致')
+    return
+  }
+  pwdLoading.value = true
+  try {
+    await authApi.changePassword({
+      old_password: pwdForm.value.old_password,
+      new_password: pwdForm.value.new_password
+    })
+    message.success('密码修改成功，请重新登录')
+    showPwdModal.value = false
+    pwdForm.value = { old_password: '', new_password: '', confirm_password: '' }
+    // 清除登录状态，跳转到登录页
+    setTimeout(() => {
+      userStore.logout()
+      window.location.href = '/login'
+    }, 1500)
+  } catch (error) {
+    const detail = error.response?.data?.detail
+    message.error(typeof detail === 'string' ? detail : '修改失败')
+  } finally {
+    pwdLoading.value = false
+  }
+}
 
 // 加载用户统计数据
 const loadStats = async () => {
@@ -170,6 +242,10 @@ onMounted(() => {
 
 .user-details {
   flex: 1;
+}
+
+.user-actions {
+  flex-shrink: 0;
 }
 
 .user-name {

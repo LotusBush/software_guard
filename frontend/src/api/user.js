@@ -19,5 +19,10 @@ export const userApi = {
   // 删除用户
   delete(id) {
     return api.delete(`/users/${id}`)
+  },
+
+  // 重置用户密码
+  resetPassword(id, data) {
+    return api.put(`/users/${id}/reset-password`, data)
   }
 }

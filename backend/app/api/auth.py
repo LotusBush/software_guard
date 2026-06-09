@@ -12,7 +12,9 @@ from ..core.deps import get_current_active_user, require_ops, get_optional_curre
 from ..core.config import settings
 from ..core.ldap import ldap_authenticate
 from ..models.user import User, UserRole
+from ..models.audit import AuditLog
 from ..schemas.user import UserCreate, UserLogin, UserResponse, Token
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/auth", tags=["认证"])
 
@@ -182,3 +184,42 @@ async def test_ldap_connection(
         return {"success": True, "message": f"已连接到 {info.other.get('serverName', [server_url])[0] if info and info.other else server_url}"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"连接失败: {str(e)}")
+
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
+
+
+@router.put("/change-password")
+async def change_password(
+    data: ChangePasswordRequest,
+    request: Request,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """修改自己的密码"""
+    if getattr(current_user, 'auth_source', 'local') != 'local':
+        raise HTTPException(status_code=400, detail="LDAP 用户请通过域控修改密码")
+
+    if len(data.new_password) < 6:
+        raise HTTPException(status_code=400, detail="新密码至少6位")
+
+    if not verify_password(data.old_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="旧密码错误")
+
+    current_user.hashed_password = get_password_hash(data.new_password)
+    current_user.token_version = (current_user.token_version or 0) + 1
+
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="change_password",
+        resource_type="user",
+        resource_id=current_user.id,
+        details={"changed_own_password": True},
+        ip_address=request.client.host if request.client else None
+    )
+    db.add(audit)
+    db.commit()
+
+    return {"message": "密码修改成功"}

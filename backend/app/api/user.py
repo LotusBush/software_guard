@@ -1,12 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel
 
 from ..core.database import get_db
 from ..core.deps import require_admin
 from ..core.security import get_password_hash
 from ..models.user import User, UserRole
+from ..models.audit import AuditLog
 from ..schemas.user import UserResponse, UserCreate
 
 router = APIRouter(prefix="/users", tags=["用户管理"])
@@ -15,6 +16,11 @@ router = APIRouter(prefix="/users", tags=["用户管理"])
 class UserUpdate(BaseModel):
     role: UserRole
     is_active: bool
+    email: Optional[str] = None
+
+
+class ResetPasswordRequest(BaseModel):
+    password: str
 
 
 @router.get("", response_model=List[UserResponse])
@@ -74,12 +80,23 @@ async def update_user(
         raise HTTPException(status_code=404, detail="用户不存在")
 
     # 不允许修改自己的角色
-    if user.id == current_user.id:
+    if user.id == current_user.id and user_data.role != user.role:
         raise HTTPException(status_code=400, detail="不能修改自己的角色")
+
+    # 邮箱校验
+    if user_data.email is not None:
+        if user_data.email.strip():
+            existing = db.query(User).filter(
+                User.email == user_data.email.strip(), User.id != user_id
+            ).first()
+            if existing:
+                raise HTTPException(status_code=400, detail="邮箱已被其他用户使用")
+            user.email = user_data.email.strip()
+        else:
+            user.email = None
 
     user.role = user_data.role
     user.is_active = user_data.is_active
-    # 递增 token_version 使旧 token 失效
     user.token_version = (user.token_version or 0) + 1
     db.commit()
     db.refresh(user)
@@ -104,3 +121,39 @@ async def delete_user(
 
     db.delete(user)
     db.commit()
+
+
+@router.put("/{user_id}/reset-password")
+async def reset_user_password(
+    user_id: int,
+    data: ResetPasswordRequest,
+    request: Request,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """管理员重置用户密码"""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    if getattr(user, 'auth_source', 'local') != 'local':
+        raise HTTPException(status_code=400, detail="LDAP 用户请通过域控修改密码")
+
+    if len(data.password) < 6:
+        raise HTTPException(status_code=400, detail="密码至少6位")
+
+    user.hashed_password = get_password_hash(data.password)
+    user.token_version = (user.token_version or 0) + 1
+
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="reset_password",
+        resource_type="user",
+        resource_id=user.id,
+        details={"target_username": user.username},
+        ip_address=request.client.host if request.client else None
+    )
+    db.add(audit)
+    db.commit()
+
+    return {"message": "密码重置成功"}
