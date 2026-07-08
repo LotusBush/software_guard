@@ -96,6 +96,10 @@
           <a-input-number v-model:value="uploadConfig.max_upload_size_gb" :min="1" :max="10" :step="1" :precision="1" />
           <span style="margin-left: 8px; color: #999;">允许上传的单个文件最大大小</span>
         </a-form-item>
+        <a-form-item label="允许的文件扩展名">
+          <a-textarea v-model:value="uploadConfig.allowed_upload_extensions" placeholder="多个扩展名用逗号分隔" :rows="3" />
+          <span style="color: #999; font-size: 12px;">多个扩展名用逗号分隔，如: .exe,.msi,.zip,.tmp。留空则使用系统默认值</span>
+        </a-form-item>
         <a-form-item>
           <a-button type="primary" @click="updateUploadConfig">保存</a-button>
         </a-form-item>
@@ -174,7 +178,8 @@ const securityConfig = ref({
 })
 
 const uploadConfig = ref({
-  max_upload_size_gb: 3
+  max_upload_size_gb: 3,
+  allowed_upload_extensions: ''
 })
 
 const ldapConfig = ref({
@@ -249,6 +254,13 @@ const loadConfigs = async () => {
 
     const maxUploadSize = configs.find(c => c.key === 'max_upload_size')
     if (maxUploadSize) uploadConfig.value.max_upload_size_gb = parseInt(maxUploadSize.value) / (1024 * 1024 * 1024)
+
+    const allowedExts = configs.find(c => c.key === 'allowed_upload_extensions')
+    if (allowedExts) {
+      uploadConfig.value.allowed_upload_extensions = allowedExts.value
+    } else {
+      uploadConfig.value.allowed_upload_extensions = '.exe,.msi,.zip,.rar,.7z,.dmg,.pkg,.deb,.rpm,.tar,.gz,.bz2,.xz,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.iso,.img'
+    }
 
     // 加载 LDAP 配置
     const ldapEnabled = configs.find(c => c.key === 'ldap_enabled')
@@ -417,14 +429,8 @@ const updateSecurityConfig = async () => {
 const updateUploadConfig = async () => {
   try {
     const valueBytes = Math.round(uploadConfig.value.max_upload_size_gb * 1024 * 1024 * 1024)
-    try {
-      await configApi.get('max_upload_size')
-      await configApi.update('max_upload_size', { value: valueBytes.toString(), description: '最大上传文件大小（字节）' })
-    } catch (error) {
-      if (error.response?.status === 404) {
-        await configApi.create({ key: 'max_upload_size', value: valueBytes.toString(), description: '最大上传文件大小（字节）' })
-      }
-    }
+    await _saveConfigItem('max_upload_size', valueBytes.toString(), '最大上传文件大小（字节）')
+    await _saveConfigItem('allowed_upload_extensions', uploadConfig.value.allowed_upload_extensions, '允许上传的文件扩展名（逗号分隔）')
     message.success('上传配置更新成功')
   } catch (error) {
     message.error('上传配置更新失败')

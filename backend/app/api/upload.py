@@ -11,7 +11,7 @@ import aiofiles
 
 from ..core.database import get_db
 from ..core.deps import require_ops
-from ..core.config import settings, get_max_upload_size, get_storage_path
+from ..core.config import settings, get_max_upload_size, get_storage_path, get_allowed_upload_extensions
 from ..core.validators import sanitize_filename, validate_path_within_dir
 from ..models.user import User
 from ..models.software import Software, SoftwareVersion
@@ -34,6 +34,15 @@ async def init_upload(
     software = db.query(Software).filter(Software.id == data.software_id).first()
     if not software:
         raise HTTPException(status_code=404, detail="软件不存在")
+
+    # 检查文件扩展名
+    allowed_extensions = get_allowed_upload_extensions(db)
+    file_ext = os.path.splitext(data.file_name)[1].lower() if data.file_name else ''
+    if file_ext not in allowed_extensions:
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的文件类型: {file_ext}，允许的类型: {', '.join(sorted(allowed_extensions))}"
+        )
 
     max_size = get_max_upload_size(db)
     if data.file_size > max_size:

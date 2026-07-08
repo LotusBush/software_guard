@@ -56,6 +56,28 @@ class Settings(BaseSettings):
 settings = Settings()
 
 
+# 默认允许上传的文件扩展名（数据库未配置时使用）
+DEFAULT_ALLOWED_UPLOAD_EXTENSIONS = {
+    ".exe", ".msi", ".zip", ".rar", ".7z",
+    ".dmg", ".pkg", ".deb", ".rpm",
+    ".tar", ".gz", ".bz2", ".xz",
+    ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+    ".iso", ".img",
+}
+
+
+def get_allowed_upload_extensions(db=None) -> set:
+    """获取允许上传的文件扩展名：优先读数据库配置，否则用默认值"""
+    if db:
+        from ..models.config import Config
+        row = db.query(Config).filter(Config.key == "allowed_upload_extensions").first()
+        if row and row.value.strip():
+            exts = {ext.strip().lower() for ext in row.value.split(",") if ext.strip()}
+            if exts:
+                return exts
+    return DEFAULT_ALLOWED_UPLOAD_EXTENSIONS
+
+
 def get_max_upload_size(db=None) -> int:
     """获取最大上传大小：优先读数据库配置，否则用环境变量"""
     if db:

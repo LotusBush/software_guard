@@ -454,7 +454,7 @@ const handleUploadVersion = async () => {
       resetUploadForm()
       loadDetail()
     } catch (error) {
-      message.error('上传失败')
+      message.error('上传失败: ' + (error.response?.data?.detail || '未知错误'))
     } finally {
       uploadLoading.value = false
     }

@@ -8,8 +8,8 @@ from pathlib import Path
 
 from ..core.database import get_db
 from ..core.deps import get_current_active_user, require_ops
-from ..core.config import settings, get_max_upload_size, get_storage_path
-from ..core.validators import sanitize_filename, validate_path_within_dir, ALLOWED_UPLOAD_EXTENSIONS
+from ..core.config import settings, get_max_upload_size, get_storage_path, get_allowed_upload_extensions
+from ..core.validators import sanitize_filename, validate_path_within_dir
 from ..models.user import User
 from ..models.software import Software, SoftwareVersion
 from ..models.vulnerability import Vulnerability
@@ -298,11 +298,12 @@ async def upload_version(
         raise HTTPException(status_code=404, detail="软件不存在")
 
     # 检查文件扩展名
+    allowed_extensions = get_allowed_upload_extensions(db)
     file_ext = os.path.splitext(file.filename)[1].lower() if file.filename else ''
-    if file_ext not in ALLOWED_UPLOAD_EXTENSIONS:
+    if file_ext not in allowed_extensions:
         raise HTTPException(
             status_code=400,
-            detail=f"不支持的文件类型: {file_ext}，允许的类型: {', '.join(sorted(ALLOWED_UPLOAD_EXTENSIONS))}"
+            detail=f"不支持的文件类型: {file_ext}，允许的类型: {', '.join(sorted(allowed_extensions))}"
         )
 
     # 流式写入文件，避免一次性加载大文件到内存
