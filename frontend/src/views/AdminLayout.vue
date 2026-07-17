@@ -65,7 +65,12 @@
             <SafetyOutlined />
             <span>漏洞管理</span>
           </a-menu-item>
-
+          
+          <a-menu-item key="AppLayout">
+            <SafetyOutlined />
+            <span>软件管理</span>
+          </a-menu-item>
+          
           <a-menu-item key="categories">
             <TagsOutlined />
             <span>软件类型</span>
