@@ -139,6 +139,8 @@ watch(() => route.path, (newPath) => {
     selectedKeys.value = ['config']
   } else if (newPath.includes('users')) {
     selectedKeys.value = ['users']
+  } else if (newPath.includes('appLayout')) {
+    selectedKeys.value = ['appLayout']
   } else {
     selectedKeys.value = ['dashboard']
   }
@@ -164,6 +166,9 @@ const handleMenuSelect = ({ key }) => {
     case 'users':
       router.push('/admin/users')
       break
+    case 'appLayout':
+      router.push('/admin/appLayout')
+      break      
   }
 }
 
