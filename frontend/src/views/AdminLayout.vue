@@ -67,7 +67,7 @@
           </a-menu-item>
           
           <a-menu-item key="AppLayout">
-            <SafetyOutlined />
+            <AppstoreOutlined />
             <span>软件管理</span>
           </a-menu-item>
           
